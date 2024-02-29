@@ -329,12 +329,24 @@ function add(pkg::PkgOrPkgs, env::Environment=ROOTENV;
              args::Cmd = ``,
             )
     c = isempty(channel) ? `` : `-c $channel`
-    @static if Sys.iswindows() && Sys.WORD_SIZE == 32
+    @static if Sys.iswindows() && Sys.WORD_SIZE == 32 || occursin("micromamba", CONDA_EXE)
         if satisfied_skip_solve
             @warn """
             The keyword satisfied_skip_solve was set to true,
-            but conda does not support --satisfied-skip-resolve on 32-bit Windows.
+            but micromamba or 32-bit Windows conda does not support --satisfied-skip-solve.
+            Will try to see if everything is already installed and then do nothing
             """
+            pkgs = typeof(pkg) <: AbstractString ? [pkg] : pkg
+            # see https://stackoverflow.com/a/54600200/14681457
+            og_stdout = stdout
+            (rd, wr) = redirect_stdout()
+            runconda(`env export`)
+            redirect_stdout(og_stdout)
+            close(wr)
+            env_pkgs = read(rd, String)
+            if all(a_pkg ->  occursin(a_pkg * '=', env_pkgs), pkgs)
+                return
+            end
         end
         S = ``
     else
